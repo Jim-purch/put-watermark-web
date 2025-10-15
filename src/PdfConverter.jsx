@@ -176,6 +176,41 @@ function PdfConverter() {
     }
   }
 
+  // 缩放控制函数
+  const handleZoomIn = () => {
+    const newZoom = clampZoom(viewZoom * 1.2)
+    setViewZoom(newZoom)
+  }
+
+  const handleZoomOut = () => {
+    const newZoom = clampZoom(viewZoom / 1.2)
+    setViewZoom(newZoom)
+  }
+
+  const handleZoomReset = () => {
+    setViewZoom(1)
+  }
+
+  const handleZoomFit = () => {
+    if (!pdfDoc || !canvasWrapRef.current) return
+    
+    const canvasWrap = canvasWrapRef.current
+    const wrapWidth = canvasWrap.clientWidth - 40 // 减去一些边距
+    const wrapHeight = canvasWrap.clientHeight - 40
+    
+    // 获取当前页面的原始尺寸
+    const page = pdfDoc.getPage(pageNum)
+    page.then(p => {
+      const viewport = p.getViewport({ scale: 1 })
+      const scaleX = wrapWidth / viewport.width
+      const scaleY = wrapHeight / viewport.height
+      const fitScale = Math.min(scaleX, scaleY)
+      
+      const newZoom = clampZoom(fitScale)
+      setViewZoom(newZoom)
+    })
+  }
+
   // 渲染页面当页码或其他参数改变时
   useEffect(() => {
     if (pdfDoc) {
@@ -388,9 +423,14 @@ function PdfConverter() {
     }
     
     setIsDragging(true)
+    // 获取canvas相对于容器的位置
+    const canvasRect = canvas.getBoundingClientRect()
     const wrapRect = canvasWrap.getBoundingClientRect()
-    const x = e.clientX - wrapRect.left + canvasWrap.scrollLeft
-    const y = e.clientY - wrapRect.top + canvasWrap.scrollTop
+    
+    // 计算相对于canvas的坐标
+    const x = e.clientX - canvasRect.left
+    const y = e.clientY - canvasRect.top
+    
     setDragStart({ x, y })
     setSelection({ x0: x, y0: y, x1: x, y1: y })
     
@@ -415,9 +455,10 @@ function PdfConverter() {
     
     if (!isDragging || !selection) return
     
-    const wrapRect = canvasWrap.getBoundingClientRect()
-    let x = e.clientX - wrapRect.left + canvasWrap.scrollLeft
-    let y = e.clientY - wrapRect.top + canvasWrap.scrollTop
+    // 获取canvas相对于页面的位置
+    const canvasRect = canvasRef.current.getBoundingClientRect()
+    let x = e.clientX - canvasRect.left
+    let y = e.clientY - canvasRect.top
     
     const r = getAspectRatio()
     if (r === null) {
@@ -445,15 +486,26 @@ function PdfConverter() {
 
   // 更新裁剪框位置
   useEffect(() => {
-    if (selection && cropRef.current) {
-      // 选区框应该显示在canvas的显示坐标上，不需要转换
+    if (selection && cropRef.current && canvasRef.current && canvasWrapRef.current) {
+      // 获取canvas相对于容器的位置
+      const canvas = canvasRef.current
+      const canvasWrap = canvasWrapRef.current
+      const canvasRect = canvas.getBoundingClientRect()
+      const wrapRect = canvasWrap.getBoundingClientRect()
+      
+      // canvas相对于容器的偏移
+      const canvasOffsetX = canvasRect.left - wrapRect.left + canvasWrap.scrollLeft
+      const canvasOffsetY = canvasRect.top - wrapRect.top + canvasWrap.scrollTop
+      
+      // 选区在canvas上的位置
       const x = Math.floor(Math.min(selection.x0, selection.x1))
       const y = Math.floor(Math.min(selection.y0, selection.y1))
       const w = Math.floor(Math.abs(selection.x1 - selection.x0))
       const h = Math.floor(Math.abs(selection.y1 - selection.y0))
       
-      cropRef.current.style.left = x + 'px'
-      cropRef.current.style.top = y + 'px'
+      // 选区框在容器中的最终位置
+      cropRef.current.style.left = (canvasOffsetX + x) + 'px'
+      cropRef.current.style.top = (canvasOffsetY + y) + 'px'
       cropRef.current.style.width = w + 'px'
       cropRef.current.style.height = h + 'px'
     }
@@ -644,7 +696,6 @@ function PdfConverter() {
           <div 
             className="pdf-canvas-wrap"
             ref={canvasWrapRef}
-            onWheel={handleWheel}
           >
             <div className="pdf-viewer-controls">
               <div className="pdf-group">
@@ -672,6 +723,31 @@ function PdfConverter() {
                   />
                   / <span>{pdfDoc ? pdfDoc.numPages : 0}</span>
                 </span>
+              </div>
+              
+              <div className="pdf-group">
+                <button className="pdf-btn" onClick={handleZoomOut} title="缩小">
+                  <i className="fa-solid fa-minus"></i>
+                </button>
+                <span className="pdf-badge">
+                  <i className="fa-solid fa-magnifying-glass"></i>
+                  {Math.round(viewZoom * 100)}%
+                </span>
+                <button className="pdf-btn" onClick={handleZoomIn} title="放大">
+                  <i className="fa-solid fa-plus"></i>
+                </button>
+                <button className="pdf-btn" onClick={handleZoomReset} title="重置缩放">
+                  <i className="fa-solid fa-arrows-rotate"></i>
+                </button>
+                <button className="pdf-btn" onClick={handleZoomFit} title="适应页面">
+                  <i className="fa-solid fa-expand"></i>
+                </button>
+              </div>
+              
+              <div className="pdf-group">
+                <button className="pdf-btn" onClick={clearSelection} title="清除选区">
+                  <i className="fa-solid fa-xmark"></i>清除选区
+                </button>
               </div>
             </div>
             

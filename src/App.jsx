@@ -180,7 +180,31 @@ function App() {
     setWmFile(f[0] || null)
   }
 
-  const PRESET_IMAGES = ['/bat-a-logo.png', '/tmt-b-logo.png', '/tmt-c-logo.png']
+  const [presetImages, setPresetImages] = useState([])
+
+  useEffect(() => {
+    let canceled = false
+    async function loadPresetList() {
+      try {
+        const res = await fetch('/preset-pngs.json', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!canceled && Array.isArray(data)) {
+          setPresetImages(data)
+        }
+      } catch (e) {
+        console.warn('加载预设 PNG 清单失败', e)
+      }
+    }
+    loadPresetList()
+    return () => { canceled = true }
+  }, [])
+
+  useEffect(() => {
+    if (wmSource === 'preset' && presetImages.length && !wmPreset) {
+      setWmPreset(presetImages[0])
+    }
+  }, [presetImages, wmSource])
 
   const processZip = async () => {
     if (!files.length) return
@@ -282,13 +306,13 @@ function App() {
               <div className="field">
                 <label>选择预设 PNG</label>
                 <div className="preset-grid">
-                  {PRESET_IMAGES.map((url) => (
+                  {presetImages.map((url) => (
                     <button type="button" key={url} className={`preset ${wmPreset === url ? 'selected' : ''}`} onClick={() => setWmPreset(url)}>
                       <img src={url} alt="预设" />
                     </button>
                   ))}
                 </div>
-                <small>这些图片位于项目的 public 目录中。</small>
+                <small>这些图片位于项目的 public 目录中，刷新后自动更新。</small>
               </div>
             ) : (
               <div className="field"><label>选择水印图片</label><input type="file" accept="image/*" onChange={onChooseWatermarkImage} /></div>

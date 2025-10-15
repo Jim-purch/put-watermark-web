@@ -98,7 +98,7 @@ function drawTextWatermark(ctx, opts) {
   ctx.fillStyle = color
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`
+  ctx.font = `${fontWeight} ${fontSize}px "${fontFamily}"`
   if (textShadow) {
     ctx.shadowColor = shadowColor
     ctx.shadowBlur = shadowBlur
@@ -367,8 +367,122 @@ function App() {
 
             {wmType === 'text' ? (
               <div className="grid">
-                <div className="field"><label>文本</label><input className="pretty-input" value={wmText} onChange={(e) => setWmText(e.target.value)} /></div>
-                <div className="field"><label>字体</label><input className="pretty-input" value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} /></div>
+                <div className="field">
+                  <label>样式预设</label>
+                  <div className="style-presets">
+                    <button
+                      type="button"
+                      className="preset-btn"
+                      onClick={() => {
+                        setWmText('TMT Waterlogo')
+                        setFontFamily('Segoe UI, Arial, sans-serif')
+                        setFontSize(48)
+                        setFontWeight('600')
+                        setColor('#ffffff')
+                        setOpacity(0.25)
+                        setAngle(0)
+                        setTextShadow(false)
+                      }}
+                    >
+                      默认水印
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-btn"
+                      onClick={() => {
+                        setWmText('版权所有')
+                        setFontFamily('PingFang SC, Microsoft YaHei, SimHei, sans-serif')
+                        setFontSize(32)
+                        setFontWeight('400')
+                        setColor('#000000')
+                        setOpacity(0.6)
+                        setAngle(0)
+                        setTextShadow(false)
+                      }}
+                    >
+                      版权标识
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-btn"
+                      onClick={() => {
+                        setWmText('CONFIDENTIAL')
+                        setFontFamily('Impact, sans-serif')
+                        setFontSize(64)
+                        setFontWeight('700')
+                        setColor('#ff0000')
+                        setOpacity(0.4)
+                        setAngle(-45)
+                        setTextShadow(true)
+                        setShadowColor('#000000')
+                        setShadowBlur(3)
+                      }}
+                    >
+                      机密文件
+                    </button>
+                    <button
+                      type="button"
+                      className="preset-btn"
+                      onClick={() => {
+                        setWmText('SAMPLE')
+                        setFontFamily('Arial, sans-serif')
+                        setFontSize(72)
+                        setFontWeight('700')
+                        setColor('#808080')
+                        setOpacity(0.3)
+                        setAngle(45)
+                        setTextShadow(false)
+                      }}
+                    >
+                      样品展示
+                    </button>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>文本</label>
+                  <div className="text-input-group">
+                    <input className="pretty-input" value={wmText} onChange={(e) => setWmText(e.target.value)} placeholder="输入自定义文字..." />
+                    <select 
+                      className="text-preset-select" 
+                      value="" 
+                      onChange={(e) => e.target.value && setWmText(e.target.value)}
+                    >
+                      <option value="">选择预设文字</option>
+                      <option value="TMT Waterlogo">TMT Waterlogo</option>
+                      <option value="版权所有">版权所有</option>
+                      <option value="© 2024">© 2024</option>
+                      <option value="机密文件">机密文件</option>
+                      <option value="内部资料">内部资料</option>
+                      <option value="样品展示">样品展示</option>
+                      <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                      <option value="SAMPLE">SAMPLE</option>
+                      <option value="DRAFT">DRAFT</option>
+                      <option value="草稿">草稿</option>
+                      <option value="未经授权禁止使用">未经授权禁止使用</option>
+                      <option value="仅供参考">仅供参考</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>字体</label>
+                  <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
+                    <option value="Segoe UI, Arial, sans-serif">Segoe UI (默认)</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+                    <option value="Times New Roman, serif">Times New Roman</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="Courier New, monospace">Courier New</option>
+                    <option value="Verdana, sans-serif">Verdana</option>
+                    <option value="Tahoma, sans-serif">Tahoma</option>
+                    <option value="Impact, sans-serif">Impact</option>
+                    <option value="Comic Sans MS, cursive">Comic Sans MS</option>
+                    <option value="PingFang SC, Microsoft YaHei, SimHei, sans-serif">苹方/微软雅黑</option>
+                    <option value="SimSun, serif">宋体</option>
+                    <option value="SimHei, sans-serif">黑体</option>
+                    <option value="KaiTi, serif">楷体</option>
+                    <option value="FangSong, serif">仿宋</option>
+                  </select>
+                </div>
                 <div className="field">
                   <label>字号</label>
                   <div className="range-input-group">
@@ -384,7 +498,35 @@ function App() {
                     <option value="700">粗体</option>
                   </select>
                 </div>
-                <div className="field"><label>颜色</label><input className="input-color" type="color" value={color} onChange={(e) => setColor(e.target.value)} /></div>
+                <div className="field">
+                  <label>颜色</label>
+                  <div className="color-input-group">
+                    <input className="input-color" type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+                    <div className="color-presets">
+                      {[
+                        { color: '#ffffff', name: '白色' },
+                        { color: '#000000', name: '黑色' },
+                        { color: '#ff0000', name: '红色' },
+                        { color: '#00ff00', name: '绿色' },
+                        { color: '#0000ff', name: '蓝色' },
+                        { color: '#ffff00', name: '黄色' },
+                        { color: '#ff00ff', name: '紫色' },
+                        { color: '#00ffff', name: '青色' },
+                        { color: '#808080', name: '灰色' },
+                        { color: '#ffa500', name: '橙色' }
+                      ].map(preset => (
+                        <button
+                          key={preset.color}
+                          type="button"
+                          className={`color-preset ${color === preset.color ? 'selected' : ''}`}
+                          style={{ backgroundColor: preset.color }}
+                          title={preset.name}
+                          onClick={() => setColor(preset.color)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
                 <div className="field"><label>不透明度</label><input type="range" min="0" max="1" step="0.01" value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} /><span className="value">{opacity}</span></div>
                 <div className="field"><label>角度(°)</label><input className="input-sm" type="number" min="-180" max="180" value={angle} onChange={(e) => setAngle(Number(e.target.value))} /></div>
                 <div className="field"><label><input type="checkbox" checked={tile} onChange={(e) => setTile(e.target.checked)} /> 平铺填满</label></div>

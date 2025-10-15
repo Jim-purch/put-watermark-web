@@ -56,3 +56,32 @@ services:
 
 - 图片处理完全在浏览器完成，浏览器内存与性能会影响处理速度，建议分批处理较大的图片集。
 - 透明 PNG 能保持透明度；JPEG 会以 92% 品质导出。
+
+Compose 文件
+
+- 新增 docker-compose.yml ，内容如下：
+  - version: "3.8"
+  - services:
+    - waterlogo-web
+      - build: . （使用仓库内 Dockerfile 构建）
+      - image: waterlogo-web:latest
+      - container_name: waterlogo-web
+      - ports: 13924:80 （宿主机 13924 → 容器 Nginx 80）
+      - restart: unless-stopped
+部署命令
+
+- 首次部署
+  - git clone <repo_url> && cd tmt-waterlogo-web
+  - docker compose up -d --build
+  - 访问 http://<服务器IP>:13924/
+- 更新上线（仓库有新提交）
+  - git pull --rebase
+  - docker compose up -d --build
+- 查看状态与日志
+  - docker compose ps
+  - docker compose logs -f
+注意事项
+
+- 若 13924 被占用，修改 docker-compose.yml 中 ports 为 "<新的端口>:80" ，重新执行 docker compose up -d --build 。
+- 这是静态站点，容器内由 Nginx 提供服务；无需 Node 运行时。
+- 如需挂载到子路径（例如 /apps/waterlogo/ ），需在构建前调整 vite.config.js 的 base 值，并重新打包再部署。

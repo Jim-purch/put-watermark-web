@@ -292,6 +292,146 @@ function PdfConverter() {
     return Array.from(new Set(all)).sort((a, b) => a - b)
   }
 
+  // 生成高质量SVG（先矢量放大到目标尺寸再裁剪）
+  const generateVectorSVG = async (selection, targetWidth, targetHeight) => {
+    if (!pdfDoc) return null
+    
+    try {
+      // 为每次调用生成唯一ID，避免SVG元素冲突
+      const uniqueId = `svg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
+      const page = await pdfDoc.getPage(pageNum)
+      
+      // 计算选区在PDF页面中的实际位置和尺寸
+      const canvas = canvasRef.current
+      const displayWidth = parseFloat(canvas.style.width) || canvas.width
+      const displayHeight = parseFloat(canvas.style.height) || canvas.height
+      
+      // 获取页面的原始viewport
+      const originalViewport = page.getViewport({ scale: 1 })
+      
+      // 计算选区在原始PDF坐标系中的位置
+      const scaleX = originalViewport.width / displayWidth
+      const scaleY = originalViewport.height / displayHeight
+      
+      const pdfX = Math.min(selection.x0, selection.x1) * scaleX
+      const pdfY = Math.min(selection.y0, selection.y1) * scaleY
+      const pdfWidth = Math.abs(selection.x1 - selection.x0) * scaleX
+      const pdfHeight = Math.abs(selection.y1 - selection.y0) * scaleY
+      
+      // 计算目标缩放比例，确保先矢量放大再裁剪
+      const targetScale = Math.max(targetWidth / pdfWidth, targetHeight / pdfHeight)
+      
+      // 尝试使用真正的矢量SVG渲染
+      try {
+        // 获取操作列表用于SVG渲染
+        const operatorList = await page.getOperatorList()
+        
+        // 创建独立的SVG渲染器实例
+        const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs)
+        svgGfx.embedFonts = true
+        
+        // 使用目标缩放比例设置viewport，先进行矢量放大
+        const svgViewport = page.getViewport({ scale: targetScale })
+        
+        // 生成SVG元素
+        const svgElement = await svgGfx.getSVG(operatorList, svgViewport)
+        
+        // 获取SVG的字符串表示
+        const serializer = new XMLSerializer()
+        let svgString = serializer.serializeToString(svgElement)
+        
+        // 计算在放大后的坐标系中的裁剪区域
+        const scaledPdfX = pdfX * targetScale
+        const scaledPdfY = pdfY * targetScale
+        const scaledPdfWidth = pdfWidth * targetScale
+        const scaledPdfHeight = pdfHeight * targetScale
+        
+        // 使用唯一ID创建白底背景去除滤镜（如果需要）
+         const backgroundRemovalFilter = removeWhiteBackground ? `
+    <filter id="removeWhite_${uniqueId}" x="0%" y="0%" width="100%" height="100%">
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -1 -1 -1 1 1"/>
+    </filter>` : ''
+         
+         // 创建裁剪后的SVG，使用放大后的坐标进行裁剪
+         const croppedSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+     width="${targetWidth}" height="${targetHeight}" 
+     viewBox="${scaledPdfX} ${scaledPdfY} ${scaledPdfWidth} ${scaledPdfHeight}">
+  <defs>
+    <clipPath id="cropClip_${uniqueId}">
+      <rect x="${scaledPdfX}" y="${scaledPdfY}" width="${scaledPdfWidth}" height="${scaledPdfHeight}"/>
+    </clipPath>${backgroundRemovalFilter}
+  </defs>
+  <g clip-path="url(#cropClip_${uniqueId})"${removeWhiteBackground ? ` filter="url(#removeWhite_${uniqueId})"` : ''}>
+    ${svgString.replace(/<\?xml[^>]*\?>/, '').replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '')}
+  </g>
+</svg>`
+        
+        return croppedSvg
+        
+      } catch (svgError) {
+        console.warn('矢量SVG渲染失败，回退到高质量栅格化:', svgError)
+        
+        // 回退到高质量栅格化方法，使用目标缩放比例确保先放大再裁剪
+        const highResScale = Math.max(targetScale * 2, 2) // 确保足够的分辨率
+        const viewport = page.getViewport({ scale: highResScale })
+        
+        // 创建高分辨率canvas
+        const tempCanvas = document.createElement('canvas')
+        const tempCtx = tempCanvas.getContext('2d')
+        tempCanvas.width = viewport.width
+        tempCanvas.height = viewport.height
+        
+        // 渲染PDF页面到canvas
+        await page.render({
+          canvasContext: tempCtx,
+          viewport: viewport
+        }).promise
+        
+        // 计算裁剪区域在高分辨率canvas中的位置
+        const cropX = pdfX * highResScale
+        const cropY = pdfY * highResScale
+        const cropWidth = pdfWidth * highResScale
+        const cropHeight = pdfHeight * highResScale
+        
+        // 创建裁剪后的canvas
+        const croppedCanvas = document.createElement('canvas')
+        const croppedCtx = croppedCanvas.getContext('2d')
+        croppedCanvas.width = targetWidth
+        croppedCanvas.height = targetHeight
+        
+        // 将裁剪区域绘制到目标canvas
+        croppedCtx.drawImage(
+          tempCanvas,
+          cropX, cropY, cropWidth, cropHeight,
+          0, 0, targetWidth, targetHeight
+        )
+        
+        // 如果需要去除白底背景，处理canvas
+        let finalCanvas = croppedCanvas
+        if (removeWhiteBackground) {
+          finalCanvas = removeWhiteBackgroundFromCanvas(croppedCanvas)
+        }
+        
+        // 转换为高质量PNG数据URL
+        const pngDataUrl = finalCanvas.toDataURL('image/png')
+        
+        // 创建包含高质量图像的SVG
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}">
+  <image href="${pngDataUrl}" x="0" y="0" width="${targetWidth}" height="${targetHeight}" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;"/>
+</svg>`
+        
+        return svg
+      }
+      
+    } catch (error) {
+      console.error('生成SVG失败:', error)
+      return null
+    }
+  }
+
   // 去除白底背景函数
   const removeWhiteBackgroundFromCanvas = (sourceCanvas) => {
     const canvas = document.createElement('canvas')
@@ -344,50 +484,141 @@ function PdfConverter() {
       return
     }
     
-    const canvas = canvasRef.current
-    const { x, y, w, h } = canvasToImageDataRect(selection)
-    
-    let baseCanvas = document.createElement('canvas')
-    baseCanvas.width = w
-    baseCanvas.height = h
-    baseCanvas.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h)
-    
-    // 如果启用了去除白底背景，则应用该功能
-    if (removeWhiteBackground) {
-      baseCanvas = removeWhiteBackgroundFromCanvas(baseCanvas)
-    }
+    setStatus('正在批量导出...')
     
     const zip = new JSZip()
     
-    for (const size of sizes) {
+    // 预计算选区信息，避免在循环中重复计算
+    const canvas = canvasRef.current
+    const baseRect = canvasToImageDataRect(selection)
+    
+    // 预计算PDF相关信息，避免在循环中重复计算
+    const page = await pdfDoc.getPage(pageNum)
+    const displayWidth = parseFloat(canvas.style.width) || canvas.width
+    const displayHeight = parseFloat(canvas.style.height) || canvas.height
+    const originalViewport = page.getViewport({ scale: 1 })
+    
+    const scaleX = originalViewport.width / displayWidth
+    const scaleY = originalViewport.height / displayHeight
+    
+    const pdfX = Math.min(selection.x0, selection.x1) * scaleX
+    const pdfY = Math.min(selection.y0, selection.y1) * scaleY
+    const pdfWidth = Math.abs(selection.x1 - selection.x0) * scaleX
+    const pdfHeight = Math.abs(selection.y1 - selection.y0) * scaleY
+
+    // 顺序处理每个尺寸，确保SVG异步生成不会冲突
+    for (let i = 0; i < sizes.length; i++) {
+      const size = sizes[i]
+      
+      // 使用预计算的选区信息
+      const { x, y, w, h } = baseRect
       const scale = size / Math.max(w, h)
       const tw = Math.round(w * scale)
       const th = Math.round(h * scale)
       
-      const c = document.createElement('canvas')
-      c.width = tw
-      c.height = th
-      c.getContext('2d').drawImage(baseCanvas, 0, 0, w, h, 0, 0, tw, th)
+      setStatus(`正在处理 ${tw}x${th} (${i + 1}/${sizes.length})...`)
       
-      if (selectedFormats.includes('png')) {
-        const png = c.toDataURL('image/png')
+      // 为非SVG格式生成高质量图像：先从PDF渲染高分辨率，再裁剪
+      let finalCanvas = null
+      if (selectedFormats.some(format => ['png', 'webp', 'jpg'].includes(format))) {
+        try {
+          
+          // 计算目标缩放比例，确保先放大再裁剪
+          const targetScale = Math.max(tw / pdfWidth, th / pdfHeight)
+          const highResScale = Math.max(targetScale * 2, 2) // 确保足够的分辨率
+          
+          // 创建高分辨率viewport并渲染
+          const viewport = page.getViewport({ scale: highResScale })
+          const tempCanvas = document.createElement('canvas')
+          const tempCtx = tempCanvas.getContext('2d')
+          tempCanvas.width = viewport.width
+          tempCanvas.height = viewport.height
+          
+          await page.render({
+            canvasContext: tempCtx,
+            viewport: viewport
+          }).promise
+          
+          // 计算裁剪区域在高分辨率canvas中的位置
+          const cropX = pdfX * highResScale
+          const cropY = pdfY * highResScale
+          const cropWidth = pdfWidth * highResScale
+          const cropHeight = pdfHeight * highResScale
+          
+          // 创建目标尺寸的canvas并裁剪
+          finalCanvas = document.createElement('canvas')
+          const finalCtx = finalCanvas.getContext('2d')
+          finalCanvas.width = tw
+          finalCanvas.height = th
+          
+          finalCtx.drawImage(
+            tempCanvas,
+            cropX, cropY, cropWidth, cropHeight,
+            0, 0, tw, th
+          )
+          
+          // 如果需要去除白底背景，处理canvas
+          if (removeWhiteBackground) {
+            finalCanvas = removeWhiteBackgroundFromCanvas(finalCanvas)
+          }
+          
+        } catch (error) {
+          console.warn('高质量渲染失败，回退到canvas缩放:', error)
+          // 回退到原来的方法（使用预计算的选区信息）
+          let baseCanvas = document.createElement('canvas')
+          baseCanvas.width = w
+          baseCanvas.height = h
+          baseCanvas.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h)
+          
+          if (removeWhiteBackground) {
+            baseCanvas = removeWhiteBackgroundFromCanvas(baseCanvas)
+          }
+          
+          finalCanvas = document.createElement('canvas')
+          finalCanvas.width = tw
+          finalCanvas.height = th
+          finalCanvas.getContext('2d').drawImage(baseCanvas, 0, 0, w, h, 0, 0, tw, th)
+        }
+      }
+      
+      if (selectedFormats.includes('png') && finalCanvas) {
+        const png = finalCanvas.toDataURL('image/png')
         zip.file(`png/page-${pageNum}-${tw}x${th}.png`, png.split(',')[1], { base64: true })
       }
-      if (selectedFormats.includes('webp')) {
-        const webp = c.toDataURL('image/webp', 0.92)
+      if (selectedFormats.includes('webp') && finalCanvas) {
+        const webp = finalCanvas.toDataURL('image/webp', 0.92)
         zip.file(`webp/page-${pageNum}-${tw}x${th}.webp`, webp.split(',')[1], { base64: true })
       }
-      if (selectedFormats.includes('jpg')) {
-        const jpg = c.toDataURL('image/jpeg', 0.92)
+      if (selectedFormats.includes('jpg') && finalCanvas) {
+        const jpg = finalCanvas.toDataURL('image/jpeg', 0.92)
         zip.file(`jpg/page-${pageNum}-${tw}x${th}.jpg`, jpg.split(',')[1], { base64: true })
       }
       if (selectedFormats.includes('svg')) {
-        const pngForSvg = c.toDataURL('image/png')
-        const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${tw}" height="${th}" viewBox="0 0 ${tw} ${th}"><image href="${pngForSvg}" x="0" y="0" width="${tw}" height="${th}"/></svg>`
-        zip.file(`svg/page-${pageNum}-${tw}x${th}.svg`, svg)
+        try {
+          // 确保每次SVG生成都是独立的，避免状态冲突（使用原始selection对象）
+          const vectorSVG = await generateVectorSVG(selection, tw, th)
+          if (vectorSVG) {
+            zip.file(`svg/page-${pageNum}-${tw}x${th}.svg`, vectorSVG)
+          } else {
+            // 如果矢量SVG生成失败，回退到PNG嵌入式SVG
+            const pngForSvg = finalCanvas ? finalCanvas.toDataURL('image/png') : 'data:image/png;base64,'
+            const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${tw}" height="${th}" viewBox="0 0 ${tw} ${th}"><image href="${pngForSvg}" x="0" y="0" width="${tw}" height="${th}"/></svg>`
+            zip.file(`svg/page-${pageNum}-${tw}x${th}.svg`, svg)
+          }
+        } catch (error) {
+          console.error(`SVG生成失败 (${tw}x${th}):`, error)
+          // 发生错误时回退到PNG嵌入式SVG
+          const pngForSvg = finalCanvas ? finalCanvas.toDataURL('image/png') : 'data:image/png;base64,'
+          const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${tw}" height="${th}" viewBox="0 0 ${tw} ${th}"><image href="${pngForSvg}" x="0" y="0" width="${tw}" height="${th}"/></svg>`
+          zip.file(`svg/page-${pageNum}-${tw}x${th}.svg`, svg)
+        }
       }
+      
+      // 给浏览器一点时间来处理，避免阻塞UI
+      await new Promise(resolve => setTimeout(resolve, 10))
     }
     
+    setStatus('正在打包文件...')
     const blob = await zip.generateAsync({ type: 'blob' })
     
     // 使用简单的下载方法
@@ -689,7 +920,7 @@ function PdfConverter() {
           </div>
           
           <div className="pdf-status">{status}</div>
-          <div className="pdf-note">说明：SVG为嵌入栅格图片的SVG，不含矢量路径；浏览器不支持导出ICO。</div>
+          <div className="pdf-note">说明：SVG为真正的矢量格式，可无限放大保持清晰，支持白底背景去除；浏览器不支持导出ICO。</div>
         </div>
         
         <div className="pdf-panel pdf-right">

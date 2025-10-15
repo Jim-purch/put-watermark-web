@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import './App.css'
+import PdfConverter from './PdfConverter'
 
 function useObjectUrl(file) {
   const [url, setUrl] = useState(null)
@@ -40,9 +41,58 @@ async function loadImageFromSource(src) {
   return loadImageFromFile(src)
 }
 
+function getWatermarkPosition(position, canvasWidth, canvasHeight, wmWidth = 0, wmHeight = 0) {
+  const margin = 50 // 边距
+  let x, y
+  
+  switch (position) {
+    case 'top-left':
+      x = margin + wmWidth / 2
+      y = margin + wmHeight / 2
+      break
+    case 'top-center':
+      x = canvasWidth / 2
+      y = margin + wmHeight / 2
+      break
+    case 'top-right':
+      x = canvasWidth - margin - wmWidth / 2
+      y = margin + wmHeight / 2
+      break
+    case 'center-left':
+      x = margin + wmWidth / 2
+      y = canvasHeight / 2
+      break
+    case 'center':
+      x = canvasWidth / 2
+      y = canvasHeight / 2
+      break
+    case 'center-right':
+      x = canvasWidth - margin - wmWidth / 2
+      y = canvasHeight / 2
+      break
+    case 'bottom-left':
+      x = margin + wmWidth / 2
+      y = canvasHeight - margin - wmHeight / 2
+      break
+    case 'bottom-center':
+      x = canvasWidth / 2
+      y = canvasHeight - margin - wmHeight / 2
+      break
+    case 'bottom-right':
+      x = canvasWidth - margin - wmWidth / 2
+      y = canvasHeight - margin - wmHeight / 2
+      break
+    default:
+      x = canvasWidth / 2
+      y = canvasHeight / 2
+  }
+  
+  return { x, y }
+}
+
 function drawTextWatermark(ctx, opts) {
   const { width, height } = ctx.canvas
-  const { text, fontFamily, fontSize, fontWeight, color, opacity, angle, tile, spacingX, spacingY, textShadow, shadowColor, shadowBlur } = opts
+  const { text, fontFamily, fontSize, fontWeight, color, opacity, angle, tile, spacingX, spacingY, textShadow, shadowColor, shadowBlur, position = 'center' } = opts
   ctx.save()
   ctx.globalAlpha = opacity
   ctx.fillStyle = color
@@ -67,8 +117,14 @@ function drawTextWatermark(ctx, opts) {
       }
     }
   } else {
+    // 计算文本尺寸用于位置计算
+    const textMetrics = ctx.measureText(text)
+    const textWidth = textMetrics.width
+    const textHeight = fontSize
+    const { x, y } = getWatermarkPosition(position, width, height, textWidth, textHeight)
+    
     ctx.save()
-    ctx.translate(width / 2, height / 2)
+    ctx.translate(x, y)
     ctx.rotate(rad)
     ctx.fillText(text, 0, 0)
     ctx.restore()
@@ -78,7 +134,7 @@ function drawTextWatermark(ctx, opts) {
 
 async function drawImageWatermark(ctx, source, opts) {
   const { width, height } = ctx.canvas
-  const { opacity, angle, tile, spacingX, spacingY, scale, grayscale } = opts
+  const { opacity, angle, tile, spacingX, spacingY, scale, grayscale, position = 'center' } = opts
   const wmImg = await loadImageFromSource(source)
   const w = Math.max(16, Math.round(wmImg.width * scale))
   const h = Math.max(16, Math.round(wmImg.height * scale))
@@ -121,8 +177,9 @@ async function drawImageWatermark(ctx, source, opts) {
       }
     }
   } else {
+    const { x, y } = getWatermarkPosition(position, width, height, w, h)
     ctx.save()
-    ctx.translate(width / 2, height / 2)
+    ctx.translate(x, y)
     ctx.rotate(rad)
     ctx.drawImage(drawSource, -w / 2, -h / 2, w, h)
     ctx.restore()
@@ -151,6 +208,7 @@ async function processOneWatermark(file, wmSettings) {
 }
 
 function App() {
+  const [activeTab, setActiveTab] = useState('watermark')
   const [files, setFiles] = useState([])
   const [processing, setProcessing] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -175,12 +233,13 @@ function App() {
   const [wmPreset, setWmPreset] = useState(null)
   const [scale, setScale] = useState(0.4)
   const [wmGrayscale, setWmGrayscale] = useState(false)
+  const [position, setPosition] = useState('center') // 水印位置: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right
 
   const watermarkSettings = useMemo(() => ({
     type: wmType,
-    text: { text: wmText, fontFamily, fontSize, fontWeight, color, opacity, angle, tile, spacingX, spacingY, textShadow, shadowColor, shadowBlur },
-    image: { file: wmSource === 'upload' ? wmFile : null, url: wmSource === 'preset' ? wmPreset : null, opacity, angle, tile, spacingX, spacingY, scale, grayscale: wmGrayscale },
-  }), [wmType, wmText, fontFamily, fontSize, fontWeight, color, opacity, angle, tile, spacingX, spacingY, textShadow, shadowColor, shadowBlur, wmSource, wmPreset, wmFile, scale, wmGrayscale])
+    text: { text: wmText, fontFamily, fontSize, fontWeight, color, opacity, angle, tile, spacingX, spacingY, textShadow, shadowColor, shadowBlur, position },
+    image: { file: wmSource === 'upload' ? wmFile : null, url: wmSource === 'preset' ? wmPreset : null, opacity, angle, tile, spacingX, spacingY, scale, grayscale: wmGrayscale, position },
+  }), [wmType, wmText, fontFamily, fontSize, fontWeight, color, opacity, angle, tile, spacingX, spacingY, textShadow, shadowColor, shadowBlur, wmSource, wmPreset, wmFile, scale, wmGrayscale, position])
 
   // 预览第一张图片的加水印效果
   useEffect(() => {
@@ -271,10 +330,26 @@ function App() {
   return (
     <div className="container">
       <header>
-        <h1>批量图片浮水印工具</h1>
-        <p>纯前端，不上传图片到服务器。支持文本/图片水印、平铺/居中。</p>
+        <h1>TMT 工具集</h1>
+        <p>纯前端工具集合，不上传文件到服务器。</p>
+        <nav className="tab-nav">
+          <button 
+            className={`tab-button ${activeTab === 'watermark' ? 'active' : ''}`}
+            onClick={() => setActiveTab('watermark')}
+          >
+            图片水印
+          </button>
+          <button 
+            className={`tab-button ${activeTab === 'pdf-converter' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pdf-converter')}
+          >
+            PDF转换
+          </button>
+        </nav>
       </header>
-      <>
+      
+      {activeTab === 'watermark' && (
+        <>
           <section className="panel">
             <div className="field">
               <label>选择待处理图片（可多选）</label>
@@ -294,7 +369,13 @@ function App() {
               <div className="grid">
                 <div className="field"><label>文本</label><input className="pretty-input" value={wmText} onChange={(e) => setWmText(e.target.value)} /></div>
                 <div className="field"><label>字体</label><input className="pretty-input" value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} /></div>
-                <div className="field"><label>字号</label><input className="input-sm" type="number" min="8" max="256" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} /></div>
+                <div className="field">
+                  <label>字号</label>
+                  <div className="range-input-group">
+                    <input type="range" min="8" max="256" step="1" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} />
+                    <input className="input-sm" type="number" min="8" max="256" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} />
+                  </div>
+                </div>
                 <div className="field"><label>字重</label>
                   <select value={fontWeight} onChange={(e) => setFontWeight(e.target.value)}>
                     <option value="400">常规</option>
@@ -312,6 +393,33 @@ function App() {
                     <div className="field"><label>水平间距</label><input className="input-sm" type="number" min="40" max="2000" value={spacingX} onChange={(e) => setSpacingX(Number(e.target.value))} /></div>
                     <div className="field"><label>垂直间距</label><input className="input-sm" type="number" min="40" max="2000" value={spacingY} onChange={(e) => setSpacingY(Number(e.target.value))} /></div>
                   </>
+                )}
+                {!tile && (
+                  <div className="field">
+                    <label>水印位置</label>
+                    <div className="position-grid">
+                      {[
+                        { value: 'top-left', label: '↖' },
+                        { value: 'top-center', label: '↑' },
+                        { value: 'top-right', label: '↗' },
+                        { value: 'center-left', label: '←' },
+                        { value: 'center', label: '●' },
+                        { value: 'center-right', label: '→' },
+                        { value: 'bottom-left', label: '↙' },
+                        { value: 'bottom-center', label: '↓' },
+                        { value: 'bottom-right', label: '↘' }
+                      ].map(pos => (
+                        <button
+                          key={pos.value}
+                          type="button"
+                          className={`position-btn ${position === pos.value ? 'selected' : ''}`}
+                          onClick={() => setPosition(pos.value)}
+                        >
+                          {pos.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 <div className="field"><label><input type="checkbox" checked={textShadow} onChange={(e) => setTextShadow(e.target.checked)} /> 启用阴影</label></div>
                 {textShadow && (
@@ -345,7 +453,13 @@ function App() {
                 ) : (
                   <div className="field"><label>选择水印图片</label><input type="file" accept="image/*" onChange={onChooseWatermarkImage} /></div>
                 )}
-                <div className="field"><label>缩放</label><input type="range" min="0.1" max="2" step="0.05" value={scale} onChange={(e) => setScale(Number(e.target.value))} /><span className="value">{scale}</span></div>
+                <div className="field">
+                  <label>缩放</label>
+                  <div className="range-input-group">
+                    <input type="range" min="0.1" max="2" step="0.05" value={scale} onChange={(e) => setScale(Number(e.target.value))} />
+                    <input className="input-sm" type="number" min="0.1" max="2" step="0.05" value={scale} onChange={(e) => setScale(Number(e.target.value))} />
+                  </div>
+                </div>
                 <div className="field"><label>不透明度</label><input type="range" min="0" max="1" step="0.01" value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} /><span className="value">{opacity}</span></div>
                 <div className="field"><label><input type="checkbox" checked={wmGrayscale} onChange={(e) => setWmGrayscale(e.target.checked)} /> 灰度</label></div>
                 <div className="field"><label>角度(°)</label><input className="input-sm" type="number" min="-180" max="180" value={angle} onChange={(e) => setAngle(Number(e.target.value))} /></div>
@@ -355,6 +469,33 @@ function App() {
                     <div className="field"><label>水平间距</label><input className="input-sm" type="number" min="40" max="2000" value={spacingX} onChange={(e) => setSpacingX(Number(e.target.value))} /></div>
                     <div className="field"><label>垂直间距</label><input className="input-sm" type="number" min="40" max="2000" value={spacingY} onChange={(e) => setSpacingY(Number(e.target.value))} /></div>
                   </>
+                )}
+                {!tile && (
+                  <div className="field">
+                    <label>水印位置</label>
+                    <div className="position-grid">
+                      {[
+                        { value: 'top-left', label: '↖' },
+                        { value: 'top-center', label: '↑' },
+                        { value: 'top-right', label: '↗' },
+                        { value: 'center-left', label: '←' },
+                        { value: 'center', label: '●' },
+                        { value: 'center-right', label: '→' },
+                        { value: 'bottom-left', label: '↙' },
+                        { value: 'bottom-center', label: '↓' },
+                        { value: 'bottom-right', label: '↘' }
+                      ].map(pos => (
+                        <button
+                          key={pos.value}
+                          type="button"
+                          className={`position-btn ${position === pos.value ? 'selected' : ''}`}
+                          onClick={() => setPosition(pos.value)}
+                        >
+                          {pos.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -376,9 +517,21 @@ function App() {
             <button className="ghost" onClick={() => { setFiles([]); setPreviewUrl(null) }}>清空</button>
           </section>
         </>
+      )}
+
+      {activeTab === 'pdf-converter' && (
+        <PdfConverter />
+      )}
 
       <footer>
         <small>本工具为纯前端实现，图片不会上传到服务器。建议使用现代浏览器。</small>
+        <div className="copyright">
+          <small>
+            Copyright © 2025 - toomotoo.online All rights reserved. 
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">津ICP备2024026970号-1</a> 
+            请勿上传违反中国大陆和香港法律的图片，违者后果自负。
+          </small>
+        </div>
       </footer>
     </div>
   )

@@ -47,7 +47,13 @@ function presetPngManifestPlugin() {
       writeManifest()
       const glob = path.join(publicDir, '**/*.png')
       server.watcher.add(glob)
-      const regenerate = () => writeManifest()
+      const regenerate = (filePath) => {
+        // 避免监听自己生成的JSON文件，防止无限循环
+        if (filePath && filePath.endsWith('preset-pngs.json')) {
+          return
+        }
+        writeManifest()
+      }
       server.watcher.on('add', regenerate)
       server.watcher.on('unlink', regenerate)
       server.watcher.on('change', regenerate)

@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  waterlogo-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: waterlogo-web:latest
+    container_name: waterlogo-web
+    ports:
+      - "13924:80" # 将宿主机 13924 端口映射到容器 Nginx 的 80
+    restart: unless-stopped
+    # 可选健康检查（按需启用）
+    # healthcheck:
+    #   test: ["CMD", "wget", "-qO-", "http://localhost/" ]
+    #   interval: 30s
+    #   timeout: 5s
+    #   retries: 3

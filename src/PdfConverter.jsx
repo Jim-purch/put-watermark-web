@@ -527,25 +527,23 @@ function PdfConverter() {
           const targetScale = Math.max(tw / pdfWidth, th / pdfHeight)
           const highResScale = Math.max(targetScale * 2, 2) // 确保足够的分辨率
           
-          // 创建高分辨率viewport并渲染
+          // 创建高分辨率viewport并仅渲染选区区域到小画布
           const viewport = page.getViewport({ scale: highResScale })
           const tempCanvas = document.createElement('canvas')
           const tempCtx = tempCanvas.getContext('2d')
-          tempCanvas.width = viewport.width
-          tempCanvas.height = viewport.height
           
+          // 只为选区开辟画布，避免整页超大导致内存溢出
+          tempCanvas.width = Math.ceil(pdfWidth * highResScale)
+          tempCanvas.height = Math.ceil(pdfHeight * highResScale)
+          
+          // 通过 transform 将页面平移，使选区位于画布原点
           await page.render({
             canvasContext: tempCtx,
-            viewport: viewport
+            viewport,
+            transform: [1, 0, 0, 1, -(pdfX * highResScale), -(pdfY * highResScale)]
           }).promise
           
-          // 计算裁剪区域在高分辨率canvas中的位置
-          const cropX = pdfX * highResScale
-          const cropY = pdfY * highResScale
-          const cropWidth = pdfWidth * highResScale
-          const cropHeight = pdfHeight * highResScale
-          
-          // 创建目标尺寸的canvas并裁剪
+          // 创建目标尺寸的canvas并缩放填充
           finalCanvas = document.createElement('canvas')
           const finalCtx = finalCanvas.getContext('2d')
           finalCanvas.width = tw
@@ -553,7 +551,7 @@ function PdfConverter() {
           
           finalCtx.drawImage(
             tempCanvas,
-            cropX, cropY, cropWidth, cropHeight,
+            0, 0, tempCanvas.width, tempCanvas.height,
             0, 0, tw, th
           )
           

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import './App.css'
 import PdfConverter from './PdfConverter'
+import FileExtractor from './FileExtractor'
 
 function useObjectUrl(file) {
   const [url, setUrl] = useState(null)
@@ -345,6 +346,12 @@ function App() {
           >
             PDF转换
           </button>
+          <button 
+            className={`tab-button ${activeTab === 'file-extractor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('file-extractor')}
+          >
+            文件提取
+          </button>
         </nav>
       </header>
       
@@ -663,6 +670,10 @@ function App() {
 
       {activeTab === 'pdf-converter' && (
         <PdfConverter />
+      )}
+      
+      {activeTab === 'file-extractor' && (
+        <FileExtractor />
       )}
 
       <footer>

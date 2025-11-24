@@ -22,6 +22,8 @@ function FileExtractor() {
   const [rowRange, setRowRange] = useState({ start: 1, end: 100 });
   const [destinationFolder, setDestinationFolder] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResults, setValidationResults] = useState([]);
 
   // 解析CSV文件
   const parseCSV = (text) => {
@@ -121,18 +123,113 @@ function FileExtractor() {
     reader.readAsText(file);
   };
 
+  // 验证单个URL是否可访问
+  const validateUrl = async (url) => {
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD', // 只获取头部信息，不下载内容
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      return { url, accessible: response.ok, status: response.status };
+    } catch (error) {
+      return { url, accessible: false, error: error.message };
+    }
+  };
+
   // 下载单个文件
   const downloadFile = async (url, filename) => {
     try {
-      const response = await fetch(url);
+      // 添加更详细的请求配置，包括跨域处理
+      const response = await fetch(url, {
+        mode: 'cors', // 明确指定CORS模式
+        cache: 'no-cache', // 避免缓存问题
+        headers: {
+          // 可以根据需要添加特定头部
+        }
+      });
+      
       if (!response.ok) {
-        throw new Error(`下载失败: ${response.status}`);
+        throw new Error(`下载失败: ${response.status} ${response.statusText}`);
       }
+      
       const blob = await response.blob();
       return { filename, blob, success: true };
     } catch (error) {
       console.error(`下载 ${filename} 失败:`, error);
-      return { filename, success: false, error: error.message };
+      
+      // 提供更详细的错误信息
+      let errorMessage = error.message;
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        errorMessage = `网络错误或跨域问题: ${url}`;
+      }
+      
+      return { filename, success: false, error: errorMessage };
+    }
+  };
+
+  // 验证第一个URL的可访问性
+  const validateFirstUrl = async () => {
+    if (!csvData.length || !selectedColumn) {
+      alert('请先选择CSV文件和URL列');
+      return;
+    }
+    
+    // 获取指定行范围的数据
+    const startIndex = Math.max(0, rowRange.start - 1);
+    const endIndex = Math.min(csvData.length, rowRange.end);
+    const rangeData = csvData.slice(startIndex, endIndex);
+    
+    // 只获取第一个URL进行验证
+    const firstRow = rangeData[0];
+    if (!firstRow) {
+      alert('没有找到数据行');
+      return;
+    }
+    
+    const columnIndex = headers.indexOf(selectedColumn);
+    if (columnIndex === -1) {
+      alert('选择的列不存在');
+      return;
+    }
+    
+    let fieldValue = firstRow[columnIndex] || '';
+    
+    // 如果使用了空格分列功能，则使用分割后的特定部分
+    if (showColumnSplitter && splitColumnData.columnName === selectedColumn) {
+      const rowIndex = startIndex;
+      if (rowIndex >= 0 && rowIndex < splitColumnData.splitValues.length) {
+        const splitValues = splitColumnData.splitValues[rowIndex];
+        if (splitValues[selectedSplitIndex]) {
+          fieldValue = splitValues[selectedSplitIndex];
+        }
+      }
+    }
+    
+    const firstUrl = urlPrefix + fieldValue;
+    
+    if (!firstUrl || !firstUrl.trim()) {
+      alert('第一个URL为空');
+      return;
+    }
+    
+    setValidating(true);
+    setValidationResults([]);
+    
+    try {
+      const result = await validateUrl(firstUrl);
+      setValidationResults([result]);
+      
+      if (result.accessible) {
+        alert(`第一个URL可访问: ${firstUrl}`);
+      } else {
+        alert(`第一个URL不可访问: ${firstUrl}\n错误: ${result.error || `状态码: ${result.status}`}`);
+      }
+    } catch (error) {
+      console.error('URL验证失败:', error);
+      alert('URL验证过程中发生错误');
+    } finally {
+      setValidating(false);
     }
   };
 
@@ -597,6 +694,13 @@ function FileExtractor() {
             <div className="field">
               <div className="button-group">
                 <button 
+                  className="button ghost" 
+                  onClick={validateFirstUrl}
+                  disabled={validating || !selectedColumn}
+                >
+                  {validating ? '验证中...' : '验证第一个URL'}
+                </button>
+                <button 
                   className="button primary" 
                   onClick={batchDownload}
                   disabled={downloading || !selectedColumn}
@@ -611,6 +715,23 @@ function FileExtractor() {
                   {exporting ? '导出中...' : '导出文件目录'}
                 </button>
               </div>
+              
+              {validationResults.length > 0 && (
+                <div className="validation-results">
+                  <h3>URL验证结果</h3>
+                  <div className="validation-list">
+                    {validationResults.map((result, index) => (
+                      <div key={index} className={`validation-item ${result.accessible ? 'success' : 'error'}`}>
+                        <span className="validation-status">{result.accessible ? '✓' : '✗'}</span>
+                        <span className="validation-url">{result.url}</span>
+                        {!result.accessible && (
+                          <span className="validation-error">{result.error || `状态码: ${result.status}`}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {downloading && (

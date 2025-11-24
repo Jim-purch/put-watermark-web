@@ -848,3 +848,88 @@ footer { margin-top: 24px; color: var(--muted); }
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* URL验证结果样式 */
+.validation-results {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.validation-results h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.validation-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.success-count {
+  color: #16a34a; /* 绿色 */
+}
+
+.error-count {
+  color: #dc2626; /* 红色 */
+}
+
+.validation-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.validation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 13px;
+}
+
+.validation-item:last-child {
+  border-bottom: none;
+}
+
+.validation-status {
+  font-weight: bold;
+  width: 16px;
+}
+
+.validation-item.success .validation-status {
+  color: #16a34a;
+}
+
+.validation-item.error .validation-status {
+  color: #dc2626;
+}
+
+.validation-url {
+  flex: 1;
+  font-family: monospace;
+  word-break: break-all;
+  color: var(--text);
+}
+
+.validation-error {
+  color: #dc2626;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.validation-more {
+  margin: 8px 0 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}

@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import './App.css'
 import PdfConverter from './PdfConverter'
 import FileExtractor from './FileExtractor'
+import ImageConverter from './ImageConverter'
 
 function useObjectUrl(file) {
   const [url, setUrl] = useState(null)
@@ -45,7 +46,7 @@ async function loadImageFromSource(src) {
 function getWatermarkPosition(position, canvasWidth, canvasHeight, wmWidth = 0, wmHeight = 0) {
   const margin = 50 // 边距
   let x, y
-  
+
   switch (position) {
     case 'top-left':
       x = margin + wmWidth / 2
@@ -87,7 +88,7 @@ function getWatermarkPosition(position, canvasWidth, canvasHeight, wmWidth = 0, 
       x = canvasWidth / 2
       y = canvasHeight / 2
   }
-  
+
   return { x, y }
 }
 
@@ -123,7 +124,7 @@ function drawTextWatermark(ctx, opts) {
     const textWidth = textMetrics.width
     const textHeight = fontSize
     const { x, y } = getWatermarkPosition(position, width, height, textWidth, textHeight)
-    
+
     ctx.save()
     ctx.translate(x, y)
     ctx.rotate(rad)
@@ -256,7 +257,7 @@ function App() {
     genPreviewAdd()
     return () => { canceled = true }
   }, [files, watermarkSettings])
-  
+
 
   const onChooseFiles = (e) => {
     const f = Array.from(e.target.files || [])
@@ -334,27 +335,33 @@ function App() {
         <h1>TMT 工具集</h1>
         <p>纯前端工具集合，不上传文件到服务器。</p>
         <nav className="tab-nav">
-          <button 
+          <button
             className={`tab-button ${activeTab === 'watermark' ? 'active' : ''}`}
             onClick={() => setActiveTab('watermark')}
           >
             图片水印
           </button>
-          <button 
+          <button
             className={`tab-button ${activeTab === 'pdf-converter' ? 'active' : ''}`}
             onClick={() => setActiveTab('pdf-converter')}
           >
             PDF转换
           </button>
-          <button 
+          <button
             className={`tab-button ${activeTab === 'file-extractor' ? 'active' : ''}`}
             onClick={() => setActiveTab('file-extractor')}
           >
             文件提取
           </button>
+          <button
+            className={`tab-button ${activeTab === 'image-converter' ? 'active' : ''}`}
+            onClick={() => setActiveTab('image-converter')}
+          >
+            图片转ICO
+          </button>
         </nav>
       </header>
-      
+
       {activeTab === 'watermark' && (
         <>
           <section className="panel">
@@ -449,9 +456,9 @@ function App() {
                   <label>文本</label>
                   <div className="text-input-group">
                     <input className="pretty-input" value={wmText} onChange={(e) => setWmText(e.target.value)} placeholder="输入自定义文字..." />
-                    <select 
-                      className="text-preset-select" 
-                      value="" 
+                    <select
+                      className="text-preset-select"
+                      value=""
                       onChange={(e) => e.target.value && setWmText(e.target.value)}
                     >
                       <option value="">选择预设文字</option>
@@ -671,17 +678,21 @@ function App() {
       {activeTab === 'pdf-converter' && (
         <PdfConverter />
       )}
-      
+
       {activeTab === 'file-extractor' && (
         <FileExtractor />
+      )}
+
+      {activeTab === 'image-converter' && (
+        <ImageConverter />
       )}
 
       <footer>
         <small>本工具为纯前端实现，图片不会上传到服务器。建议使用现代浏览器。</small>
         <div className="copyright">
           <small>
-            Copyright © 2025 - toomotoo.online All rights reserved. 
-            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">津ICP备2024026970号-1</a> 
+            Copyright © 2025 - toomotoo.online All rights reserved.
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">津ICP备2024026970号-1</a>
             请勿上传违反中国大陆和香港法律的图片，违者后果自负。
           </small>
         </div>
